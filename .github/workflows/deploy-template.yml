@@ -25,6 +25,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Generate unique image tag
+      - name: Generate Image Tag
+        run: |
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          IMAGE_TAG=dev-${GITHUB_RUN_NUMBER}-${SHORT_SHA}
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # Dynamic builder
       - name: Set Builder Image
         run: |
           if [ "$PROJECT_TYPE" = "java" ]; then
@@ -63,9 +71,14 @@ jobs:
       - name: Build
         run: oc start-build $APP_NAME --from-dir=. --follow
 
+      - name: Tag Image
+        run: |
+          oc tag $APP_NAME:latest $APP_NAME:$IMAGE_TAG
+
       - name: Deploy
         run: |
           oc get deployment $APP_NAME || oc new-app $APP_NAME:latest --name=$APP_NAME
+          oc set image deployment/$APP_NAME $APP_NAME=$APP_NAME:$IMAGE_TAG
           oc rollout status deployment/$APP_NAME
 
       - name: Expose
