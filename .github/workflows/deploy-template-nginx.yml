@@ -25,18 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Generate unique image tag
       - name: Generate Image Tag
         run: |
           SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
           IMAGE_TAG=dev-${GITHUB_RUN_NUMBER}-${SHORT_SHA}
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-      # Dynamic builder
       - name: Set Builder Image
         run: |
           if [ "$PROJECT_TYPE" = "java" ]; then
-            echo "BUILDER_IMAGE=java:openjdk-17-ubi8" >> $GITHUB_ENV
+            echo "BUILDER_IMAGE=openshift/openjdk-11-rhel7" >> $GITHUB_ENV
           elif [ "$PROJECT_TYPE" = "nginx" ]; then
             echo "BUILDER_IMAGE=openshift/nginx" >> $GITHUB_ENV
           else
@@ -78,8 +76,23 @@ jobs:
       - name: Deploy
         run: |
           oc get deployment $APP_NAME || oc new-app $APP_NAME:latest --name=$APP_NAME
-          oc set image deployment/$APP_NAME $APP_NAME=$APP_NAME:$IMAGE_TAG
+
+          # limit old ReplicaSets (VERY IMPORTANT)
+          oc patch deployment $APP_NAME -p '{"spec":{"revisionHistoryLimit":2}}'
+
+          # safer image update
+          oc set image deployment/$APP_NAME --all-containers=$APP_NAME:$IMAGE_TAG
+
           oc rollout status deployment/$APP_NAME
 
-      - name: Expose
-        run: oc get route $APP_NAME || oc expose svc $APP_NAME
+      - name: Expose with HTTPS
+        run: |
+          if oc get route $APP_NAME; then
+            oc patch route $APP_NAME \
+              -p '{"spec":{"tls":{"termination":"edge","insecureEdgeTerminationPolicy":"Redirect"}}}'
+          else
+            oc expose svc $APP_NAME \
+              --name=$APP_NAME \
+              --port=8080 \
+              --tls-termination=edge
+          fi
