@@ -1,0 +1,123 @@
+name: CI Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        required: true
+        type: string
+      project_type:
+        required: false
+        type: string
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_NAME: ${{ inputs.app_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Detect type
+      - name: Detect Project Type
+        id: detect
+        run: |
+          if [ -f "gradlew" ]; then
+            echo "type=java" >> $GITHUB_OUTPUT
+          elif [ -f "package.json" ]; then
+            echo "type=node" >> $GITHUB_OUTPUT
+          else
+            echo "Unsupported project"
+            exit 1
+          fi
+
+      - name: Set Type
+        run: |
+          TYPE="${{ inputs.project_type }}"
+          if [ -z "$TYPE" ]; then
+            TYPE="${{ steps.detect.outputs.type }}"
+          fi
+          echo "PROJECT_TYPE=$TYPE" >> $GITHUB_ENV
+
+      # Java
+      - name: Setup Java
+        if: env.PROJECT_TYPE == 'java'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build Java
+        if: env.PROJECT_TYPE == 'java'
+        run: |
+          chmod +x gradlew
+          ./gradlew clean test jacocoTestReport
+
+      # Node
+      - name: Setup Node
+        if: env.PROJECT_TYPE == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Build Node
+        if: env.PROJECT_TYPE == 'node'
+        run: |
+          npm install
+          npm test || true
+
+      # Sonar
+      - name: Install Sonar
+        run: |
+          curl -Lo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip -q sonar-scanner.zip
+          mv sonar-scanner-* sonar-scanner
+          echo "$PWD/sonar-scanner/bin" >> $GITHUB_PATH
+
+      - name: Sonar Scan
+        run: |
+          if [ "$PROJECT_TYPE" = "java" ]; then
+            sonar-scanner \
+              -Dsonar.projectKey=${{ env.APP_NAME }} \
+              -Dsonar.sources=src/main/java \
+              -Dsonar.java.binaries=build/classes \
+              -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          else
+            sonar-scanner \
+              -Dsonar.projectKey=${{ env.APP_NAME }} \
+              -Dsonar.sources=. \
+              -Dsonar.exclusions=node_modules/** \
+              -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+              -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+              -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          fi
+
+      - name: Quality Gate
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          TASK_ID=$(grep ceTaskId .scannerwork/report-task.txt | cut -d'=' -f2)
+
+          STATUS="PENDING"
+          while [[ "$STATUS" == "PENDING" || "$STATUS" == "IN_PROGRESS" ]]; do
+            sleep 5
+            RESPONSE=$(curl -k -s -u "${{ secrets.SONAR_TOKEN }}:" \
+              -H "Accept: application/json" \
+              "${{ secrets.SONAR_HOST_URL }}/api/ce/task?id=$TASK_ID")
+            STATUS=$(echo "$RESPONSE" | jq -r '.task.status')
+          done
+
+          ANALYSIS_ID=$(echo "$RESPONSE" | jq -r '.task.analysisId')
+
+          QG_STATUS=$(curl -k -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            -H "Accept: application/json" \
+            "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?analysisId=$ANALYSIS_ID" \
+            | jq -r '.projectStatus.status')
+
+          if [[ "$QG_STATUS" != "OK" ]]; then
+            echo "Quality Gate Failed"
+            exit 1
+          fi
