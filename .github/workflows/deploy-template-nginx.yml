@@ -81,7 +81,7 @@ jobs:
           oc patch deployment $APP_NAME -p '{"spec":{"revisionHistoryLimit":2}}'
 
           # safer image update
-          oc set image deployment/$APP_NAME --all-containers=$APP_NAME:$IMAGE_TAG
+          oc set image deployment/$APP_NAME $APP_NAME=$APP_NAME:$IMAGE_TAG
 
           oc rollout status deployment/$APP_NAME
 
