@@ -30,7 +30,7 @@ jobs:
           if [ "$PROJECT_TYPE" = "java" ]; then
             echo "BUILDER_IMAGE=java:openjdk-17-ubi8" >> $GITHUB_ENV
           elif [ "$PROJECT_TYPE" = "node" ]; then
-            echo "BUILDER_IMAGE=nodejs:18-ubi8" >> $GITHUB_ENV
+            echo "BUILDER_IMAGE=nodejs:22-ubi8" >> $GITHUB_ENV
           else
             echo "Unsupported project type"
             exit 1
