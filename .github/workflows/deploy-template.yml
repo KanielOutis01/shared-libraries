@@ -9,6 +9,9 @@ on:
       namespace:
         required: true
         type: string
+      project_type:
+        required: true
+        type: string
 
 jobs:
   deploy:
@@ -17,9 +20,22 @@ jobs:
     env:
       APP_NAME: ${{ inputs.app_name }}
       NAMESPACE: ${{ inputs.namespace }}
+      PROJECT_TYPE: ${{ inputs.project_type }}
 
     steps:
       - uses: actions/checkout@v4
+
+      # ✅ ADDED: choose builder image dynamically
+      - name: Set Builder Image
+        run: |
+          if [ "$PROJECT_TYPE" = "java" ]; then
+            echo "BUILDER_IMAGE=java:openjdk-17-ubi8" >> $GITHUB_ENV
+          elif [ "$PROJECT_TYPE" = "node" ]; then
+            echo "BUILDER_IMAGE=nodejs:18-ubi8" >> $GITHUB_ENV
+          else
+            echo "Unsupported project type"
+            exit 1
+          fi
 
       - name: Install oc
         run: |
@@ -41,7 +57,7 @@ jobs:
         run: |
           oc get bc $APP_NAME || oc new-build \
             --name=$APP_NAME \
-            --image-stream=java:openjdk-17-ubi8 \
+            --image-stream=$BUILDER_IMAGE \
             --binary=true \
             --to=$APP_NAME:latest
 
