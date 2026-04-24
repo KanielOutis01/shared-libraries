@@ -23,9 +23,8 @@ jobs:
       PROJECT_TYPE: ${{ inputs.project_type }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # ✅ ADDED: choose builder image dynamically
       - name: Set Builder Image
         run: |
           if [ "$PROJECT_TYPE" = "java" ]; then

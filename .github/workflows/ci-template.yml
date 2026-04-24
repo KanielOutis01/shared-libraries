@@ -18,9 +18,8 @@ jobs:
       APP_NAME: ${{ inputs.app_name }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # Detect type
       - name: Detect Project Type
         id: detect
         run: |
@@ -41,7 +40,6 @@ jobs:
           fi
           echo "PROJECT_TYPE=$TYPE" >> $GITHUB_ENV
 
-      # Java
       - name: Setup Java
         if: env.PROJECT_TYPE == 'java'
         uses: actions/setup-java@v4
@@ -55,7 +53,6 @@ jobs:
           chmod +x gradlew
           ./gradlew clean test jacocoTestReport
 
-      # Node
       - name: Setup Node
         if: env.PROJECT_TYPE == 'node'
         uses: actions/setup-node@v4
@@ -68,7 +65,6 @@ jobs:
           npm install
           npm test || true
 
-      # Sonar
       - name: Install Sonar
         run: |
           curl -Lo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
