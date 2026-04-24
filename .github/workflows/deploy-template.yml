@@ -25,14 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Generate unique image tag
       - name: Generate Image Tag
         run: |
           SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
           IMAGE_TAG=dev-${GITHUB_RUN_NUMBER}-${SHORT_SHA}
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-      # Dynamic builder
       - name: Set Builder Image
         run: |
           if [ "$PROJECT_TYPE" = "java" ]; then
